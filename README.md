@@ -1,2 +1,2 @@
 # meta-switchbsp
-BSP Based Yokto Migration
+BSP Based Yocto Migration

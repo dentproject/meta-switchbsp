@@ -10,11 +10,11 @@ The current target release for this layer is v5.1 (`styhead`).
 This layer depends on the following layers:
 
 * `openembedded-core` or Yocto's `poky`
-- https://git.openembedded.org/openembedded-core
-- https://git.yoctoproject.org/poky
+  - https://git.openembedded.org/openembedded-core
+  - https://git.yoctoproject.org/poky
 
 * `meta-oe` (part of `meta-openembedded`)
-- https://github.com/openembedded/meta-openembedded.git
+  - https://github.com/openembedded/meta-openembedded.git
 
 The following `MACHINE` targets are available in this layer:
 

@@ -1,0 +1,166 @@
+#!/usr/bin/bash
+#
+#   import-platforms - import platforms from SONiC and ONL
+#
+
+shopt -s -o pipefail
+
+# LOCAL VARS
+
+TAG="$(basename $0)"
+E_OK=0
+E_FAIL=1
+VERSION=0.1.0
+DEBUG=${DEBUG:-0}
+
+# HELPER FNCS
+
+quit() {
+    printf '[%s] ERROR: %s\n' "$2" "$3"
+    exit $1
+}
+
+debugf() {
+    (( DEBUG == 1)) || return
+    printf '[%s]: %s\n' "$1" "$2"
+}
+
+msgf() {
+    printf '[%s]: %s\n' "$1" "$2"
+}
+
+# VARS
+
+TOPDIR=
+if [[ -f ./conf/layer.conf ]]; then
+    TOPDIR=$(realpath .)
+elif [[ -f ../conf/layer.conf ]]; then
+    TOPDIR=$(realpath ..)
+else
+    quit $E_FAIL 'main' 'unable to determine TOPDIR'
+fi
+TMPDIR=${TOPDIR}/tmp-import
+
+SONICBI_REMOTE=${SONICBI_REMOTE:-'https://github.com/sonic-net/sonic-buildimage.git'}
+SONICBI_GITREF=${SONICBI_GITREF:-'2ff111cb94113ef01841597e95c2c5ddbee2a6f8'} # master
+ONL_REMOTE=${ONL_REMOTE:-'https://github.com/dentproject/dentOS.git'}
+ONL_GITREF=${ONL_GITREF:-'75b3bd56dcef907a9bf52b280464b03211794b9f'} # main
+
+# MAIN FUNCS
+
+_do_import_platform() {
+    (( $# > 0 )) || return 1
+
+    local arch="$1"
+    local platform="$2"
+    local workdir="$3"
+
+    # [uppercase-pn]: meta-environment-<target> is upper case, this can result in unexpected behavior. 
+    local platlower="$(echo $platform | tr '[A-Z]' '[a-z]')"
+
+    msgf "$FUNCNAME" "=> importing $2 as ${platlower}"
+
+    local INCLUDE=''
+    case "$arch" in
+        arm64)  INCLUDE+="require conf/machine/include/arm64-common.inc"     ;;
+        x86_64) INCLUDE+="require conf/machine/include/x86_64-common.inc"    ;;
+        *) ;;
+    esac
+
+    if [[ -f $workdir/$platlower.conf ]]; then
+        msgf "$FUNCNAME" "  -> file already exists, ignoring"
+        return 1
+    fi
+
+    # TODO: should we do complex platform analysis?
+    #       e.g. sonic-linux-kernel/patch/kconfig-inclusions
+    cat <<EOF > $workdir/$platlower.conf
+require conf/machine/include/common.inc
+${INCLUDE}
+EOF
+
+}
+
+banner() {
+    printf -- "                                     \n"
+    printf -- "          meta-switchbsp             \n"
+    printf -- "-------------------------------------\n"
+    printf -- "        ${TAG} v${VERSION}           \n"
+    printf -- "                                     \n"
+}
+
+clean() {
+    msgf "$FUNCNAME" "=> removing ${TMPDIR}"
+    [[ -d ${TMPDIR} ]] && rm -rf ${TMPDIR}
+    mkdir -p ${TMPDIR}
+}
+
+fetch() {
+    cd ${TMPDIR}
+
+    msgf "$FUNCNAME" "=> fetching ${SONICBI_REMOTE}"
+    git clone ${SONICBI_REMOTE} ${TMPDIR}/sonic
+    git -C ${TMPDIR}/sonic checkout ${SONICBI_GITREF}
+
+    msgf "$FUNCNAME" "=> fetching ${ONL_REMOTE}"
+    git clone ${ONL_REMOTE} ${TMPDIR}/onl
+    git -C ${TMPDIR}/onl checkout ${ONL_GITREF}
+}
+
+import() {
+    [[ -d ${TMPDIR}/sonic/device ]] || return 1
+    [[ -d ${TMPDIR}/onl/packages/platforms ]] || return 1
+
+    # SONiC
+    msgf "$FUNCNAME" "=> importing SONiC platforms"
+    for _oemdir in ${TMPDIR}/sonic/device/*; do
+        local _oem=$(basename $_oemdir)
+        debugf "$FUNCNAME" "+ $(basename $_oemdir)"
+
+        for _platdir in $_oemdir/*; do
+            local _platform=$(basename $_platdir)
+            debugf "$FUNCNAME" "  - ${_platform}"
+
+            # TODO: at this point limit to a small subset of the available platforms in SONiC
+            _filter=( 'x86_64-accton_as4630_54pe-r0'
+                      'arm64-marvell_rd98DX35xx-r0' )
+            if [[ ${_filter[@]} =~ $_platform ]]; then
+                _arch=$(echo $_platform | cut -d'-' -f1)
+                _sku=$(cat $_platdir/default_sku)
+                msgf "$FUNCNAME" "  -> matched ${_sku} (${_platdir})"
+
+                _do_import_platform "$_arch" "$_platform" "${TOPDIR}/conf/machine"
+            fi
+        done
+    done
+
+    # ONL
+    msgf "$FUNCNAME" "=> importing DENT (OpenNetworkLinux) platforms"
+    find ${TMPDIR}/onl/packages/platforms -path '*platform-config/*/src/lib/*.yml' -print0 | \
+    while IFS= read -r -d '' _platdef; do 
+        local _platform=$(basename ${_platdef} | cut -d'.' -f1)
+        debugf "$FUNCNAME" "+ ${_platform}"
+
+        # TODO: at this point limit to a small subset of the available platforms
+        _filter=( 'arm64-delta-tn4810m-r0'
+                  'arm64-delta-tn48m-r0'
+                  'arm64-accton-as4224-52p-r0'
+                  'arm64-accton-as5114-48x-r0'
+                  'arm64-accton-as4564-26p-r0' )
+        if [[ ${_filter[@]} =~ $_platform ]]; then
+            local _arch=$(echo $_platform | cut -d'-' -f1)
+            msgf "$FUNCNAME" "  -> matched (${_arch}, ${_platform})"
+
+            _do_import_platform "$_arch" "$_platform" "${TOPDIR}/conf/machine"
+        fi
+    done
+}
+
+# PROGRAM START
+
+umask 0022
+
+banner
+clean || quit $E_FAIL 'main' "unable to clean"
+fetch || quit $E_FAIL 'main' "unable to fetch"
+import || quit $E_FAIL 'main' "unable to import"

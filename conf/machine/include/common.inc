@@ -1,5 +1,4 @@
-PREFERRED_PROVIDER_virtual/kernel ?= "linux-dentproject"
-KERNEL_IMAGETYPE ?= "Image"
+MACHINEOVERRIDES =. "switch:"
 
 SERIAL_CONSOLE ?= "115200 ttyS0"
 

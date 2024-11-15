@@ -1,7 +1,7 @@
 SUMMARY = "A minimal ONIE installer image"
 DESCRIPTION = "This package is based on top of core-image-minimal and \
     creates a ONIE installer image from the rootfs, kernel image, and \
-    kernel devicetree.
+    kernel devicetree. \
 "
 
 SRC_URI = "\

@@ -11,3 +11,5 @@ SRC_URI = " \
 require linux-dentproject.inc
 
 KERNEL_DTC_FLAGS += "-@ -H epapr"
+
+do_package_qa[noexec] = "1"

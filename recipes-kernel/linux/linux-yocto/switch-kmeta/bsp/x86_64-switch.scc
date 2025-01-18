@@ -1,0 +1,5 @@
+define KMACHINE x86_64-switch
+define KTYPE standard
+define KARCH x86
+
+kconf hardware x86_64.cfg
